@@ -1,0 +1,31 @@
+Name: cannbot-dsl
+Version: 0.8.2
+Summary: Python DSL and MLIR compiler for AscendC kernels
+Home-page:
+Author: Huawei Technologies Co., Ltd.
+Author-email:
+License: LicenseRef-CANN-Open-Software-License-2.0
+Location: /opt/conda/envs/cannbot/lib/python3.12/site-packages
+Requires:
+---
+Name: torch
+Version: 2.12.0+cpu
+Summary: Tensors and Dynamic neural networks in Python with strong GPU acceleration
+Home-page: https://pytorch.org
+Author:
+Author-email: PyTorch Team <packages@pytorch.org>
+License: BSD-3-Clause
+Location: /opt/conda/envs/cannbot/lib/python3.12/site-packages
+Requires: filelock, fsspec, jinja2, networkx, setuptools, sympy, typing-extensions
+Required-by: flash-linear-attention-npu-a5, torch_npu
+---
+Name: torch_npu
+Version: 2.12.0.post2
+Summary: NPU bridge for PyTorch
+Home-page: https://gitcode.com/ascend/pytorch
+Author:
+Author-email:
+License: BSD License
+Location: /opt/conda/envs/cannbot/lib/python3.12/site-packages
+Requires: torch
+Required-by: flash-linear-attention-npu-a5

@@ -1,0 +1,86 @@
+[
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 0,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed0.pt",
+    "reference_cache": false
+  },
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 1,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed1.pt",
+    "reference_cache": false
+  },
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 2,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed2.pt",
+    "reference_cache": false
+  }
+]

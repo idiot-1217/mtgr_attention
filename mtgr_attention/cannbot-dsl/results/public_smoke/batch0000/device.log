@@ -1,0 +1,11 @@
+CPU preparation completed outside device lock in 6.58s
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_EXECUTED 464 0
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_EXECUTED 464 1
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_C_ABI success workspace_bytes=16896
+ACLNN_EXECUTED 464 2
+NPU0 lock released after 9.60s

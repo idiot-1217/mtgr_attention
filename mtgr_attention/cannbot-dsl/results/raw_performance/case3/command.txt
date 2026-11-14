@@ -1,0 +1,21 @@
+[
+  "msprof",
+  "op",
+  "--kernel-name=*kernel_MtgrRaggedSegmentAttention___call___0*",
+  "--output=/mnt/map/l00946857/.cache/mtgr-reference-runner-20261113/acceptance/performance/case3/profile",
+  "--aic-metrics=BasicInfo",
+  "--warm-up=5",
+  "--launch-count=10",
+  "--kill=true",
+  "/opt/conda/envs/cannbot/bin/python",
+  "/mnt/map/l00946857/.cache/mtgr-reference-runner-20261113/snapshot/test/attention/mtgr_ragged_segment_attention/run_test.py",
+  "--_msprof-worker",
+  "--case-index",
+  "3",
+  "--_msprof-repeat",
+  "10",
+  "--_msprof-output",
+  "/mnt/map/l00946857/.cache/mtgr-reference-runner-20261113/acceptance/performance/case3",
+  "--output-dir",
+  "/mnt/map/l00946857/.cache/mtgr-reference-runner-20261113/acceptance/performance/case3"
+]

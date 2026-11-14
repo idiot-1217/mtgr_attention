@@ -1,0 +1,209 @@
+[
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 0,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed0.pt",
+    "reference_cache": false,
+    "passed": true,
+    "finite": true,
+    "deterministic": true,
+    "zero_rows_passed": true,
+    "accuracy": {
+      "passed": true,
+      "level": 0,
+      "mare_npu": 0.32259954339750896,
+      "mere_npu": 0.0035007247907604343,
+      "rmse_npu": 0.0008858529382618257,
+      "mare_ref": 1.3963159678715893,
+      "mere_ref": 0.007770563942814661,
+      "rmse_ref": 0.0016570913954350344,
+      "mare_ratio": 0.23103620585908566,
+      "mere_ratio": 0.4505110332432833,
+      "rmse_ratio": 0.534583029458833,
+      "mare_th": 10.0,
+      "mere_th": 2.0,
+      "rmse_th": 2.0,
+      "mare_passed": true,
+      "mere_passed": true,
+      "rmse_passed": true,
+      "small_value_error_count_npu": 2234,
+      "small_value_error_count_ref": 2274,
+      "small_value_passed": true,
+      "inf_nan_match": true,
+      "num_elements": 315392,
+      "message": "Pass"
+    },
+    "allclose_diagnostic": {
+      "float64": {
+        "allclose": true,
+        "bad_elements": 0
+      },
+      "simulated": {
+        "allclose": false,
+        "bad_elements": 3
+      }
+    },
+    "native_executions": 2,
+    "actual_path": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/batch0000/actual0.pt"
+  },
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 1,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed1.pt",
+    "reference_cache": false,
+    "passed": true,
+    "finite": true,
+    "deterministic": true,
+    "zero_rows_passed": true,
+    "accuracy": {
+      "passed": true,
+      "level": 0,
+      "mare_npu": 0.4098583410956473,
+      "mere_npu": 0.0034768649522949908,
+      "rmse_npu": 0.0009045594717388553,
+      "mare_ref": 1.2969470109994738,
+      "mere_ref": 0.00750578387790536,
+      "rmse_ref": 0.0016780056565268288,
+      "mare_ratio": 0.31601779997148516,
+      "mere_ratio": 0.4632247622436579,
+      "rmse_ratio": 0.5390681898004631,
+      "mare_th": 10.0,
+      "mere_th": 2.0,
+      "rmse_th": 2.0,
+      "mare_passed": true,
+      "mere_passed": true,
+      "rmse_passed": true,
+      "small_value_error_count_npu": 2084,
+      "small_value_error_count_ref": 2104,
+      "small_value_passed": true,
+      "inf_nan_match": true,
+      "num_elements": 315392,
+      "message": "Pass"
+    },
+    "allclose_diagnostic": {
+      "float64": {
+        "allclose": true,
+        "bad_elements": 0
+      },
+      "simulated": {
+        "allclose": false,
+        "bad_elements": 18
+      }
+    },
+    "native_executions": 2,
+    "actual_path": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/batch0000/actual1.pt"
+  },
+  {
+    "task": {
+      "case_index": 464,
+      "seed": 2,
+      "config": {
+        "H": 8,
+        "D": 128,
+        "seg_lengths": [
+          [
+            8,
+            300
+          ]
+        ],
+        "rules": [
+          1,
+          2
+        ],
+        "matched_prefix_arr": [
+          0
+        ],
+        "rule1_seg_idx": 0,
+        "multi_seed": true,
+        "perf_test": false
+      }
+    },
+    "payload": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/case464_seed2.pt",
+    "reference_cache": false,
+    "passed": true,
+    "finite": true,
+    "deterministic": true,
+    "zero_rows_passed": true,
+    "accuracy": {
+      "passed": true,
+      "level": 0,
+      "mare_npu": 0.39496638292689307,
+      "mere_npu": 0.0035252928514659973,
+      "rmse_npu": 0.0008862768762918601,
+      "mare_ref": 1.0825751873704446,
+      "mere_ref": 0.007650793126239568,
+      "rmse_ref": 0.0016443721569195592,
+      "mare_ratio": 0.36483967814398116,
+      "mere_ratio": 0.4607748233807898,
+      "rmse_ratio": 0.538975847141649,
+      "mare_th": 10.0,
+      "mere_th": 2.0,
+      "rmse_th": 2.0,
+      "mare_passed": true,
+      "mere_passed": true,
+      "rmse_passed": true,
+      "small_value_error_count_npu": 2216,
+      "small_value_error_count_ref": 2256,
+      "small_value_passed": true,
+      "inf_nan_match": true,
+      "num_elements": 315392,
+      "message": "Pass"
+    },
+    "allclose_diagnostic": {
+      "float64": {
+        "allclose": true,
+        "bad_elements": 0
+      },
+      "simulated": {
+        "allclose": true,
+        "bad_elements": 0
+      }
+    },
+    "native_executions": 2,
+    "actual_path": "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke/batch0000/actual2.pt"
+  }
+]

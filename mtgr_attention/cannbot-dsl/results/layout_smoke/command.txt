@@ -1,0 +1,12 @@
+[
+  "/opt/conda/envs/cannbot/bin/python",
+  "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/run_test.py",
+  "--mode",
+  "accuracy",
+  "--case-index",
+  "464",
+  "--workers",
+  "3",
+  "--output-dir",
+  "/mnt/map/l00946857/.cache/mtgr-delivery-layout-20261114/cannbot-dsl/results/layout_smoke"
+]
