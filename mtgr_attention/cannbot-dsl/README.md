@@ -11,20 +11,19 @@
 安装匹配CANN的torch、torch_npu及cannbot-dsl，并由部署方提供已安装的ACLNN运行库和算子资源包。交付目录只提供运行测试入口。
 
 ```bash
-cd /path/to/cannbot-dsl
-source /path/to/cann/set_env.sh
-export MTGR_ACLNN_LIBRARY=/path/to/installed/libmtgr_aclnn.so
-export ASCEND_CUSTOM_OPP_PATH=/path/to/installed/opp
+# 从交付目录执行；事先加载CANN环境并设置运行库和算子资源环境变量。
+: "${MTGR_ACLNN_LIBRARY:?请配置ACLNN运行库环境变量}"
+: "${ASCEND_CUSTOM_OPP_PATH:?请配置算子资源环境变量}"
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 # 只测一条配置：原始case464，三个种子，真实ACLNN调用。
-python run_test.py --mode accuracy --case-index 464 --output-dir "$PWD/results/smoke"
+python run_test.py --mode accuracy --case-index 464 --output-dir "results/smoke"
 # 全量468条功能 + 七条性能（需msprof/asys；性能仅占主kernel）。
-python -m pytest test_attention.py -q -s --mtgr-npu --mtgr-mode acceptance --mtgr-output "$PWD/results/acceptance"
+python -m pytest test_attention.py -q -s --mtgr-npu --mtgr-mode acceptance --mtgr-output "results/acceptance"
 # 基础验收完成后才能运行泛化。
-python run_test.py --mode accuracy --generalization 10000 --batch-size 128 --acceptance-report "$PWD/results/acceptance/validation_report.txt" --output-dir "$PWD/results/generalization"
+python run_test.py --mode accuracy --generalization 10000 --batch-size 128 --acceptance-report "results/acceptance/validation_report.txt" --output-dir "results/generalization"
 ```
 
-本机验证根目录默认是脚本所在目录，可用MTGR_VALIDATION_ROOT指定结果允许落盘的父目录。设备固定NPU0；公共锁/tmp/cannbotdsl-validation-device0.lock应由管理员提供。每个功能设备子任务最多300秒，性能最多180秒；CPU计算在锁外完成。
+本机验证根目录默认是脚本所在目录，可用MTGR_VALIDATION_ROOT指定结果允许落盘的父目录。设备固定NPU0；共享设备锁应由管理员提供。每个功能设备子任务最多300秒，性能最多180秒；CPU计算在锁外完成。
 
 原生运行库由部署环境提供，未打入Git。results中的历史绝对路径是实测溯源信息，执行脚本已改为基于自身目录解析，不引用原samples/test仓库布局。
 
