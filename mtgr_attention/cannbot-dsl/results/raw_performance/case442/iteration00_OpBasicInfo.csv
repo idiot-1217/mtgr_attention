@@ -1,2 +1,0 @@
-Op Name,Op Type,Task Duration(us),Block Dim,Mix Block Dim,Device Id,Pid,Current Freq,Rated Freq,
-kernel_MtgrRaggedSegmentAttention___call___0,mix,70.325996,32,64,0,2253969,1650,1650,

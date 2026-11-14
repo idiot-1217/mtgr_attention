@@ -1,2 +1,0 @@
-case_index,H,D,B,num_segs,seg_lengths,rules,matched_prefix_arr,total_runs,passed,status,mare_min,mare_max,mere_min,mere_max,rmse_min,rmse_max
-464,8,128,1,2,8|300,1|2,0,3,3,PASS,0.32259954339750896,0.4098583410956473,0.0034768649522949908,0.0035252928514659973,0.0008858529382618257,0.0009045594717388553

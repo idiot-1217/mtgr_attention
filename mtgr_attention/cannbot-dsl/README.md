@@ -29,3 +29,5 @@ python run_test.py --mode accuracy --generalization 10000 --batch-size 128 --acc
 原生运行库由部署环境提供，未打入Git。results中的历史绝对路径是实测溯源信息，执行脚本已改为基于自身目录解析，不引用原samples/test仓库布局。
 
 接口、Host和Kernel已合并为mtgr_ragged_segment_attention.py；metadata和common独立保留。测试脚本通过aclnn_backend.py调用预安装ACLNN运行库，不回退到Python attention。
+
+交付只保存报告和汇总CSV。命令中的validation_report.txt由测试执行时生成，用于后续泛化的前置验收检查，不是随仓库保存的文件。
