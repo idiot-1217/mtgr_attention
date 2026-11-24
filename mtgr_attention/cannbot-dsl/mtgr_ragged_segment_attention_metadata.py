@@ -29,6 +29,7 @@ if __package__:
         CORE_END_QUERY_TASK,
         CORE_END_WORKGROUP,
         CORE_METADATA_WORDS,
+        METADATA_CORE_CAPACITY,
         CORE_PREVIOUS_END_TASK_DELTA,
         CORE_PREVIOUS_END_WORKGROUP_DELTA,
         CORE_SECTION_BEGIN,
@@ -65,6 +66,7 @@ else:
         CORE_END_QUERY_TASK,
         CORE_END_WORKGROUP,
         CORE_METADATA_WORDS,
+        METADATA_CORE_CAPACITY,
         CORE_PREVIOUS_END_TASK_DELTA,
         CORE_PREVIOUS_END_WORKGROUP_DELTA,
         CORE_SECTION_BEGIN,
@@ -521,7 +523,7 @@ class MtgrMetadataHost:
             )
         rule_input = starts if rules is None else rules  # 传入AICPU的规则张量或占位张量。
         size = (
-            METADATA_HEADER_WORDS + batch * (QUERY_HEAD_COUNT // group) * cores * CORE_METADATA_WORDS
+            METADATA_HEADER_WORDS + batch * (QUERY_HEAD_COUNT // group) * METADATA_CORE_CAPACITY * CORE_METADATA_WORDS
         )  # metadata输出分配的INT32元素数。
         output = torch.empty(size, dtype=torch.int32, device=starts.device)  # 设备输出张量。
         _, compiled = MtgrMetadataHost.compiled_metadata()  # 调用方无需使用的返回项；已编译AICPU任务。

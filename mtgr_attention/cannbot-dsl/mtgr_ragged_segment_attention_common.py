@@ -12,12 +12,13 @@
 
 QUERY_HEAD_COUNT = 8  # 接口固定的查询头数量。
 MAX_REQUESTS = 8  # 接口允许的最大请求数。
+METADATA_CORE_CAPACITY = 36  # 固定计划容量，与实际发射核数解耦。
 MAX_CUBE_CORES = 32  # 支持的最大Cube核数。
 CACHE_BLOCK_TOKENS = 128  # 分页缓存每个物理页的token数量。
 DEFAULT_QUERY_TILE_ROWS = 128  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
 DEFAULT_KV_TILE_COLUMNS = 128  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
 DEFAULT_CORE_COUNT = 32  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
-DEFAULT_COMPILE_CORE_COUNT = 24  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
+DEFAULT_COMPILE_CORE_COUNT = 24  # 旧辅助入口的兼容默认值；动态编译缓存不使用此值。
 DEFAULT_PIPELINE_STAGES = 14  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
 DEFAULT_CROSS_INTERVAL = 2  # 接口默认值或编译期规格；在函数定义/编译前保持固定。
 FLOAT32_BITS = 32  # FP32元素的位宽。

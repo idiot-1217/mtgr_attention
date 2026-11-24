@@ -4,3 +4,4 @@ build/
 *.pt
 *.pending
 !results/**/*.log
+runtime/mtgr_runtime/

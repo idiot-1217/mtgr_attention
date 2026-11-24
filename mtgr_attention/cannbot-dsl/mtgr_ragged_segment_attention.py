@@ -2184,7 +2184,7 @@ import torch
 from cannbotdsl import get_platform_info
 import cannbotdsl as dsl
 from functools import lru_cache
-from cannbotdsl import Tensor, TensorSpec, dtypes, host
+from cannbotdsl import Dim, Tensor, TensorSpec, dtypes, host
 from cannbotdsl.types.dtypes import bfloat16
 
 if __package__:
@@ -2199,16 +2199,19 @@ if __package__:
         ATTENTION_COMPILE_CACHE_SIZE,
         CACHE_BLOCK_TOKENS,
         CORE_METADATA_WORDS,
+        METADATA_CORE_CAPACITY,
         DEFAULT_COMPILE_CORE_COUNT,
         DEFAULT_CORE_COUNT,
         DEFAULT_KV_TILE_COLUMNS,
         DEFAULT_QUERY_TILE_ROWS,
         MAX_REQUESTS,
+        MAX_CUBE_CORES,
         METADATA_HEADER_WORDS,
         MIN_SEGMENTS,
         QUERY_HEAD_COUNT,
         SND_TENSOR_RANK,
         SUPPORTED_HEAD_DIMENSIONS,
+        SUPPORTED_GQA_GROUPS,
         SUPPORTED_KV_HEADS,
         SUPPORTED_MATCH_MODES,
         SUPPORTED_QUERY_TILE_ROWS,
@@ -2219,16 +2222,19 @@ else:
         ATTENTION_COMPILE_CACHE_SIZE,
         CACHE_BLOCK_TOKENS,
         CORE_METADATA_WORDS,
+        METADATA_CORE_CAPACITY,
         DEFAULT_COMPILE_CORE_COUNT,
         DEFAULT_CORE_COUNT,
         DEFAULT_KV_TILE_COLUMNS,
         DEFAULT_QUERY_TILE_ROWS,
         MAX_REQUESTS,
+        MAX_CUBE_CORES,
         METADATA_HEADER_WORDS,
         MIN_SEGMENTS,
         QUERY_HEAD_COUNT,
         SND_TENSOR_RANK,
         SUPPORTED_HEAD_DIMENSIONS,
+        SUPPORTED_GQA_GROUPS,
         SUPPORTED_KV_HEADS,
         SUPPORTED_MATCH_MODES,
         SUPPORTED_QUERY_TILE_ROWS,
@@ -2404,7 +2410,7 @@ class MtgrRaggedSegmentAttentionTiling:
             ValueError: 计划的类型、设备、长度或连续性与预期规格不一致。
         """
         expected_size = (
-            METADATA_HEADER_WORDS + batch * kv_heads * core_num * CORE_METADATA_WORDS
+            METADATA_HEADER_WORDS + batch * kv_heads * METADATA_CORE_CAPACITY * CORE_METADATA_WORDS
         )  # metadata计划区预期INT32元素数。
         if (
             metadata.dtype != torch.int32
@@ -2504,7 +2510,6 @@ class MtgrRaggedSegmentAttentionLaunch:
         )
 
 
-@lru_cache(maxsize=ATTENTION_COMPILE_CACHE_SIZE)
 def build_mtgr_ragged_segment_attention_executable(
     total: int,
     head_dimension: int,
@@ -2517,40 +2522,69 @@ def build_mtgr_ragged_segment_attention_executable(
     key_tile_columns: int = DEFAULT_KV_TILE_COLUMNS,
     cores: int = DEFAULT_COMPILE_CORE_COUNT,
 ):
-    """由输入形状、类型和固定分块构造编译规格，缓存返回可复用的主kernel程序。
+    """兼容原编译入口，返回支持运行时形状的可执行对象。
 
     Args:
-        total: 所有请求实时查询 token 的总数。
-        head_dimension: 每个注意力头的维度。
-        group: 每个 KV 头对应的查询头数。
-        batch: 请求数量。
-        segments: 每个请求的分段数量。
-        cache_blocks: 分页 KV 缓存中的物理块数量。
-        table_cols: 每个请求的页表容量。
-        query_tile_rows: 完整 Cube 查询块的行数。
-        key_tile_columns: 每个键值块的列数。
-        cores: attention 主 kernel 使用的 Cube 核数。
+        total: 兼容参数，实时token总数不参与缓存区分。
+        head_dimension: 静态头维度，支持32、64、128。
+        group: 兼容GQA参数，仅检查取值，不按GQA生成编译变体。
+        batch: 兼容参数，请求数量在运行时读取。
+        segments: 兼容参数，段数量在运行时读取。
+        cache_blocks: 兼容参数，缓存物理块数在运行时读取。
+        table_cols: 兼容参数，页表列数在运行时读取。
+        query_tile_rows: 编译期查询分块行数。
+        key_tile_columns: 编译期键值分块列数。
+        cores: 兼容核数参数，仅检查取值，实际发射核数由调用时提供。
 
     Returns:
-        已编译的 DSL 可执行对象，可用于后续 attention 主 kernel 调用。
+        可跨ragged形状、GQA和核数复用的DSL可执行对象。
+
+    Raises:
+        ValueError: GQA或核数不在接口支持范围内。
     """
+    if group not in SUPPORTED_GQA_GROUPS or not 1 <= cores <= MAX_CUBE_CORES:
+        raise ValueError("GQA group or core count is outside the supported range.")
+    return _compile_mtgr_dynamic_executable(head_dimension, query_tile_rows, key_tile_columns)
+
+
+@lru_cache(maxsize=ATTENTION_COMPILE_CACHE_SIZE)
+def _compile_mtgr_dynamic_executable(
+    head_dimension: int,
+    query_tile_rows: int,
+    key_tile_columns: int,
+):
+    """每种头维度及分块只编译一次，其他轴和核数在运行时提供。
+
+    Args:
+        head_dimension: 编译期头维度。
+        query_tile_rows: 编译期查询分块行数。
+        key_tile_columns: 编译期键值分块列数。
+
+    Returns:
+        具有动态TensorSpec的已编译DSL可执行对象。
+    """
+    total = Dim("total_q", min=1)
+    batch = Dim("batch", min=1, max=MAX_REQUESTS)
+    segments = Dim("segments", min=MIN_SEGMENTS)
+    cache_blocks = Dim("cache_blocks", min=1)
+    table_cols = Dim("table_cols", min=1)
+    kv_heads = Dim("kv_heads", min=1, max=QUERY_HEAD_COUNT)
+    metadata_words = Dim("metadata_words", min=METADATA_HEADER_WORDS + METADATA_CORE_CAPACITY * CORE_METADATA_WORDS)
     query_specification = TensorSpec(
         (total, QUERY_HEAD_COUNT, head_dimension), bfloat16
-    )  # 查询张量的编译规格；构造输入的静态形状及类型规格。
+    )  # 查询张量的编译规格，token轴为动态维。
     kv_specification = TensorSpec(
-        (total, QUERY_HEAD_COUNT // group, head_dimension), bfloat16
-    )  # 实时KV张量的编译规格；构造输入的静态形状及类型规格。
+        (total, kv_heads, head_dimension), bfloat16
+    )  # 实时KV张量的编译规格，token轴和KV头轴均为动态维。
     cache_specification = TensorSpec(
-        (cache_blocks, CACHE_BLOCK_TOKENS, QUERY_HEAD_COUNT // group, head_dimension), bfloat16
+        (cache_blocks, CACHE_BLOCK_TOKENS, kv_heads, head_dimension), bfloat16
     )  # 分页KV缓存的形状和类型规格；构造输入的静态形状及类型规格。
     page_table_specification = TensorSpec((batch, table_cols), dtypes.int32)  # 分页KV缓存的物理页索引规格。
     segment_offsets_specification = TensorSpec((batch, segments + 1), dtypes.int32)  # 每个请求的分段边界规格。
     segment_rules_specification = TensorSpec((segments,), dtypes.int32)  # 各段掩码规则规格。
     sequence_starts_specification = TensorSpec((batch + 1,), dtypes.int32)  # 实时Q/K/V的请求起止索引规格。
     prefix_lengths_specification = TensorSpec((batch,), dtypes.int32)  # 每个请求的缓存前缀长度规格。
-    metadata_specification = TensorSpec(
-        (METADATA_HEADER_WORDS + batch * (QUERY_HEAD_COUNT // group) * cores * CORE_METADATA_WORDS,), dtypes.int32
-    )  # 独立metadata预处理生成的调度计划规格。
+    metadata_specification = TensorSpec((metadata_words,), dtypes.int32)
     return dsl.compile(
         MtgrRaggedSegmentAttentionLaunch(query_tile_rows, key_tile_columns).launch,
         query_specification,
