@@ -247,7 +247,7 @@ class _MtgrPipelineResources:
         output_accumulator: 在线输出累加器。
         out: 最终输出暂存或设备输出视图。
         pv_right_operand_slots: PV矩阵乘使用的L0B右操作数池。
-        weighted_values: PV结果池或结果视图。
+        weighted_values: 独立PV结果环形池；D128的行跨度包含32字节padding。
         probability_nz: NZ概率环形池。
     """
     def __init__(
@@ -266,6 +266,8 @@ class _MtgrPipelineResources:
         Returns:
             None: 通过对象属性或传入缓冲区保存结果。
         """
+        weighted_value_row_padding_elements = 8  # D128的PV结果每行增加32字节跨度。
+        weighted_value_slot_count = 1  # PV结果使用独立单槽，生命周期由RingBuffer管理。
         probability_nz_padding_elements = 16  # 每个NZ列组增加32字节，BF16为16个元素。
         softmax_scratch_planes = 3  # 保留三平面物理分配；dense仅使用max与配对sum两个平面。
         query_tensor_slot_count = 2  # 本函数使用的query_tensor_slot_count编译期配置。
@@ -277,7 +279,7 @@ class _MtgrPipelineResources:
         alpha_slot_count = 3  # 本函数使用的alpha_slot_count编译期配置。
         pv_right_operand_slot_count = 2  # 本函数使用的pv_right_operand_slot_count编译期配置。
         small_head_score_slots = 5  # 本函数使用的small_head_score_slots编译期配置。
-        default_score_slot_count = 4  # 本函数使用的default_score_slot_count编译期配置。
+        default_score_slot_count = 3 if head_dimension == key_tile_columns else 4  # D128分数池使用三槽，其余头维度保持四槽。
         probability_nz_slot_count = 4  # 本函数使用的probability_nz_slot_count编译期配置。
         self.query_tile_rows, self.key_tile_columns, self.head_dimension = (
             query_tile_rows,
@@ -327,10 +329,21 @@ class _MtgrPipelineResources:
             depth=small_head_score_slots if head_dimension == SMALL_HEAD_DIMENSION else default_score_slot_count,
         )  # QK分数池或分数视图；分配环形缓冲池，槽位由depth指定并由读写游标管理。
         if head_dimension == key_tile_columns:
-            self.weighted_values = self.scores  # PV结果池或结果视图。
+            self.weighted_values = RingBuffer(
+                MemLoc.UB,
+                dtypes.float32,
+                make_layout(
+                    (self.vector_query_rows, head_dimension),
+                    stride=(head_dimension + weighted_value_row_padding_elements, 1),
+                ),
+                depth=weighted_value_slot_count,
+            )  # D128的独立PV单槽，不再与QK分数池交替复用。
         else:
             self.weighted_values = RingBuffer(
-                MemLoc.UB, dtypes.float32, make_layout((self.vector_query_rows, head_dimension)), depth=1
+                MemLoc.UB,
+                dtypes.float32,
+                make_layout((self.vector_query_rows, head_dimension)),
+                depth=weighted_value_slot_count,
             )  # PV结果池或结果视图；分配环形缓冲池，槽位由depth指定并由读写游标管理。
 
         if head_dimension == SMALL_HEAD_DIMENSION:
@@ -873,6 +886,9 @@ class MtgrRaggedSegmentAttentionVector:
         dense: bool,
         is_first_kv_block: bool,
         has_diagonal: bool,
+        uniform_prefix_mask: bool = False,
+        specialize_prefix_halves: bool = False,
+        prefix_within_low_half: bool = False,
     ):
         """处理非密集块的掩码及在线状态，保留空历史、空块语义，配对归约分母并直接发布NZ概率。
 
@@ -889,6 +905,9 @@ class MtgrRaggedSegmentAttentionVector:
             dense: 整块连续可见标记。
             is_first_kv_block: 首个有效块标记。
             has_diagonal: 当前键块可能包含可见对角位置的编译期标记。
+            uniform_prefix_mask: 有效64行共享非空前段掩码、且当前块无可见对角的编译期标记。
+            specialize_prefix_halves: 根据前段边界特化两个64列半块的编译期标记。
+            prefix_within_low_half: 前段终点位于前64列以内，后64列完全不可见的编译期标记。
 
         Returns:
             None: 通过对象属性或传入缓冲区保存结果。
@@ -916,6 +935,13 @@ class MtgrRaggedSegmentAttentionVector:
             state_base = (
                 query_task_sequence % ONLINE_STATE_SLOTS * VECTOR_QUERY_ROWS
             )  # 当前查询任务对应的在线状态槽起点。
+            shared_visible0 = full  # 特化路径在行循环外生成前64列共享掩码。
+            shared_visible1 = full  # 特化路径在行循环外生成后64列共享掩码。
+            packed_high_zero = vector_registers.vdups(0.0, dtypes.bfloat16, mask=packed_mask)  # 全遮蔽后半块的打包零值。
+            if const_expr(uniform_prefix_mask):
+                shared_cutoff = vector_registers.vload_broadcast(params, 0)
+                shared_visible0 = vector_registers.vlt(keys0, shared_cutoff, mask=full)
+                shared_visible1 = vector_registers.vlt(keys1, shared_cutoff, mask=full)
             for tile_row_index in dsl_range(
                 0, scores.shape[0], 1, unroll=query_row_unroll
             ):  # 当前AIV块内的行号；按给定区间依次遍历当前处理项。
@@ -925,45 +951,54 @@ class MtgrRaggedSegmentAttentionVector:
                 score_low_half = vector_registers.vmuls(
                     vector_registers.vload(scores, tile_row_index * DEFAULT_KV_TILE_COLUMNS), scale, mask=full
                 )  # 当前行前64列分数。
-                score_high_half = vector_registers.vmuls(
-                    vector_registers.vload(scores, tile_row_index * DEFAULT_KV_TILE_COLUMNS + VECTOR_FLOAT32_LANES),
-                    scale,
-                    mask=full,
-                )  # 当前行后64列分数。
+                if const_expr(not specialize_prefix_halves or not prefix_within_low_half):
+                    score_high_half = vector_registers.vmuls(
+                        vector_registers.vload(scores, tile_row_index * DEFAULT_KV_TILE_COLUMNS + VECTOR_FLOAT32_LANES),
+                        scale,
+                        mask=full,
+                    )  # 当前行后64列分数。
+                else:
+                    score_high_half = negative_sentinel
                 if const_expr(not dense):
-                    cutoff = vector_registers.vload_broadcast(
-                        params, tile_row_index
-                    )  # 当前行连续可见前段的结束位置；从片上存储读取当前计算需要的数据。
-                    visible0 = vector_registers.vlt(keys0, cutoff, mask=full)
-                    visible1 = vector_registers.vlt(keys1, cutoff, mask=full)
-                    nonempty = vector_registers.vgts(cutoff, dtypes.int32(key_column_start), mask=full)
-                    if const_expr(has_diagonal):
-                        diagonal = vector_registers.vload_broadcast(
-                            params, VECTOR_QUERY_ROWS + tile_row_index
-                        )  # 当前行单独可见的对角位置；仅对角范围与键块相交时读取。
-                        visible0 = vector_registers.mask_or(
-                            visible0, vector_registers.veq(keys0, diagonal, mask=full), exec_mask=full
-                        )
-                        visible1 = vector_registers.mask_or(
-                            visible1, vector_registers.veq(keys1, diagonal, mask=full), exec_mask=full
-                        )
-                        nonempty = vector_registers.mask_or(
-                            nonempty,
-                            vector_registers.mask_and(
-                                vector_registers.vges(diagonal, dtypes.int32(key_column_start), mask=full),
-                                vector_registers.vles(
-                                    diagonal, dtypes.int32(key_column_start + last_kv_column_offset), mask=full
+                    if const_expr(uniform_prefix_mask):
+                        visible0 = shared_visible0
+                        visible1 = shared_visible1
+                    else:
+                        cutoff = vector_registers.vload_broadcast(
+                            params, tile_row_index
+                        )  # 当前行连续可见前段的结束位置；从片上存储读取当前计算需要的数据。
+                        visible0 = vector_registers.vlt(keys0, cutoff, mask=full)
+                        visible1 = vector_registers.vlt(keys1, cutoff, mask=full)
+                        nonempty = vector_registers.vgts(cutoff, dtypes.int32(key_column_start), mask=full)
+                        if const_expr(has_diagonal):
+                            diagonal = vector_registers.vload_broadcast(
+                                params, VECTOR_QUERY_ROWS + tile_row_index
+                            )  # 当前行单独可见的对角位置；仅对角范围与键块相交时读取。
+                            visible0 = vector_registers.mask_or(
+                                visible0, vector_registers.veq(keys0, diagonal, mask=full), exec_mask=full
+                            )
+                            visible1 = vector_registers.mask_or(
+                                visible1, vector_registers.veq(keys1, diagonal, mask=full), exec_mask=full
+                            )
+                            nonempty = vector_registers.mask_or(
+                                nonempty,
+                                vector_registers.mask_and(
+                                    vector_registers.vges(diagonal, dtypes.int32(key_column_start), mask=full),
+                                    vector_registers.vles(
+                                        diagonal, dtypes.int32(key_column_start + last_kv_column_offset), mask=full
+                                    ),
+                                    exec_mask=full,
                                 ),
                                 exec_mask=full,
-                            ),
-                            exec_mask=full,
-                        )
-                    score_low_half = vector_registers.vselect(
-                        score_low_half, negative_sentinel, cond_mask=visible0
-                    )  # 当前行前64列分数。
-                    score_high_half = vector_registers.vselect(
-                        score_high_half, negative_sentinel, cond_mask=visible1
-                    )  # 当前行后64列分数。
+                            )
+                    if const_expr(not specialize_prefix_halves or prefix_within_low_half):
+                        score_low_half = vector_registers.vselect(
+                            score_low_half, negative_sentinel, cond_mask=visible0
+                        )  # 当前行前64列分数。
+                    if const_expr(not specialize_prefix_halves or not prefix_within_low_half):
+                        score_high_half = vector_registers.vselect(
+                            score_high_half, negative_sentinel, cond_mask=visible1
+                        )  # 当前行后64列分数。
 
                 pair_max = vector_registers.vmax(
                     score_low_half, score_high_half, mask=full
@@ -1015,23 +1050,28 @@ class MtgrRaggedSegmentAttentionVector:
                         score_high_half, updated, mask=full
                     )  # 当前行后64列的未归一化概率。
                 else:
-                    updated = vector_registers.vselect(
-                        updated, previous_maximum, cond_mask=nonempty
-                    )  # 当前块合并后的最大值。
-                    factor = vector_registers.vselect(factor, one, cond_mask=nonempty)  # 本行或本批次在线缩放因子。
-
+                    if const_expr(not uniform_prefix_mask):
+                        updated = vector_registers.vselect(
+                            updated, previous_maximum, cond_mask=nonempty
+                        )  # 当前块合并后的最大值。
+                        factor = vector_registers.vselect(factor, one, cond_mask=nonempty)  # 本行或本批次在线缩放因子。
                     probability_low_half = vector_registers.vexp_sub(
                         score_low_half, updated, mask=full
                     )  # 当前行前64列的未归一化概率。
-                    probability_high_half = vector_registers.vexp_sub(
-                        score_high_half, updated, mask=full
-                    )  # 当前行后64列的未归一化概率。
-                    probability_low_half = vector_registers.vselect(
-                        probability_low_half, zero, cond_mask=visible0
-                    )  # 当前行前64列的未归一化概率。
-                    probability_high_half = vector_registers.vselect(
-                        probability_high_half, zero, cond_mask=visible1
-                    )  # 当前行后64列的未归一化概率。
+                    if const_expr(not specialize_prefix_halves or not prefix_within_low_half):
+                        probability_high_half = vector_registers.vexp_sub(
+                            score_high_half, updated, mask=full
+                        )  # 当前行后64列的未归一化概率。
+                    else:
+                        probability_high_half = zero
+                    if const_expr(not specialize_prefix_halves or prefix_within_low_half):
+                        probability_low_half = vector_registers.vselect(
+                            probability_low_half, zero, cond_mask=visible0
+                        )  # 当前行前64列的未归一化概率。
+                    if const_expr(not specialize_prefix_halves or not prefix_within_low_half):
+                        probability_high_half = vector_registers.vselect(
+                            probability_high_half, zero, cond_mask=visible1
+                        )  # 当前行后64列的未归一化概率。
                 total = vector_registers.vmul(
                     normalization_sum, factor, mask=full
                 )  # 由函数上下文决定的分母累计值或总token数。
@@ -1046,9 +1086,12 @@ class MtgrRaggedSegmentAttentionVector:
                 packed_probability_low = vector_registers.vcast(
                     probability_low_half, dtypes.bfloat16, mask=full
                 )  # 前64列概率转换并压紧后的BF16数据。
-                packed_probability_high = vector_registers.vcast(
-                    probability_high_half, dtypes.bfloat16, mask=full
-                )  # 后64列概率转换并压紧后的BF16数据。
+                if const_expr(not specialize_prefix_halves or not prefix_within_low_half):
+                    packed_probability_high = vector_registers.vcast(
+                        probability_high_half, dtypes.bfloat16, mask=full
+                    )  # 后64列概率转换并压紧后的BF16数据。
+                else:
+                    packed_probability_high = packed_high_zero
                 packed_probability_row, _ = vector_registers.vdeinterleave(
                     packed_probability_low, packed_probability_high
                 )  # 合并两半BF16有效槽，生成完整128列概率。
@@ -1363,7 +1406,7 @@ class MtgrRaggedSegmentAttentionVector:
                     )  # 当前向量片段有效通道掩码；调用方无需使用的返回项。
                     offset = tile_row_index * output_accumulator.shape[1] + column_index  # 当前行列对应的线性存储偏移。
                     current_output = vector_registers.vload(
-                        value, offset
+                        value, tile_row_index * value.physical_layout.stride[0] + column_index
                     )  # 当前输出片段的FP32中间值；从片上存储读取当前计算需要的数据。
                     if const_expr(not is_first_kv_block):
                         current_output = vector_registers.vmadd(
@@ -1496,6 +1539,7 @@ class MtgrRaggedSegmentAttentionVector:
         diagonal_min: int,
         diagonal_max: int,
         masked: int,
+        full_query_rows: bool = False,
     ):
         """区分全遮蔽、密集和普通掩码路径，生成概率、缩放和分母状态，并将概率搬入L1。
 
@@ -1509,6 +1553,7 @@ class MtgrRaggedSegmentAttentionVector:
             diagonal_min: 本AIV有效对角位置的最小值。
             diagonal_max: 本AIV有效对角位置的最大值。
             masked: 当前AIV半块全遮蔽标记。
+            full_query_rows: 当前AIV的64个查询行均有效，用于保护共享前段掩码特化。
 
         Returns:
             None: 通过对象属性或传入缓冲区保存结果。
@@ -1593,7 +1638,82 @@ class MtgrRaggedSegmentAttentionVector:
                 )
         else:
             if key_column_start + state.key_tile_columns <= diagonal_min or key_column_start > diagonal_max:
-                if key_column_start == 0:
+                if full_query_rows and cutoff_min == cutoff_max and key_column_start < cutoff_min:
+                    if cutoff_max - key_column_start <= VECTOR_FLOAT32_LANES:
+                        if key_column_start == 0:
+                            self.softmax_tile(
+                                scores,
+                                prob,
+                                state.maximum,
+                                state.normalization_sum,
+                                factors,
+                                state.row_params,
+                                key_column_start,
+                                query_task_sequence,
+                                scale,
+                                False,
+                                True,
+                                False,
+                                True,
+                                True,
+                                True,
+                            )
+                        else:
+                            self.softmax_tile(
+                                scores,
+                                prob,
+                                state.maximum,
+                                state.normalization_sum,
+                                factors,
+                                state.row_params,
+                                key_column_start,
+                                query_task_sequence,
+                                scale,
+                                False,
+                                False,
+                                False,
+                                True,
+                                True,
+                                True,
+                            )
+                    else:
+                        if key_column_start == 0:
+                            self.softmax_tile(
+                                scores,
+                                prob,
+                                state.maximum,
+                                state.normalization_sum,
+                                factors,
+                                state.row_params,
+                                key_column_start,
+                                query_task_sequence,
+                                scale,
+                                False,
+                                True,
+                                False,
+                                True,
+                                True,
+                                False,
+                            )
+                        else:
+                            self.softmax_tile(
+                                scores,
+                                prob,
+                                state.maximum,
+                                state.normalization_sum,
+                                factors,
+                                state.row_params,
+                                key_column_start,
+                                query_task_sequence,
+                                scale,
+                                False,
+                                False,
+                                False,
+                                True,
+                                True,
+                                False,
+                            )
+                elif key_column_start == 0:
                     self.softmax_tile(
                         scores,
                         prob,
@@ -1961,6 +2081,10 @@ class MtgrRaggedSegmentAttention:
                                     cached_prefix_tokens,
                                     live_sequence_length,
                                 )  # 本AIV所有有效行的连续前段最小结束位置；本AIV可见连续前段的最大结束位置；当前AIV半块最小对角位置；当前AIV半块最大对角位置。
+                                full_query_rows = (
+                                    live_sequence_length - query_row_start
+                                    >= (pipeline_resources.vector_subblock_index + 1) * pipeline_resources.vector_query_rows
+                                )  # 每个查询任务仅计算一次有效行标记，尾块保留原逐行掩码路径。
                                 full_cutoff, full_diag_min, full_diag_max = self.cube_visible_bounds(
                                     offsets,
                                     rules,
@@ -2059,6 +2183,7 @@ class MtgrRaggedSegmentAttention:
                                             diagonal_min,
                                             diagonal_max,
                                             masked,
+                                            full_query_rows,
                                         )
                                         issued += 1  # 已经发射的有效块数。
                                         if tick >= pipeline_delay_ticks:

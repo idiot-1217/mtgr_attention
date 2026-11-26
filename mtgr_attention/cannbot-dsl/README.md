@@ -40,3 +40,7 @@ metadata按36核槽容量分配，实际支持核数仍为1～32。长度为16 +
 运行环境升级为cannbot-dsl 0.8.3、CANN 9.3.0。随附runtime/mtgr_runtime_ascend950.tar.gz包含预编译运行库、metadata库和算子资源。解压后，将MTGR_ACLNN_LIBRARY指向其中lib目录的运行库，将ASCEND_CUSTOM_OPP_PATH指向opp目录，再运行上述测试命令。运行测试不需要重新编译原生库。
 
 新增Host回归可执行`python -m pytest test_dynamic_shape.py -q`。完整新增能力和性能结果见[动态Shape验证报告](results/动态Shape验证报告.md)。
+
+## 2026-11-26验证更新
+
+当前交付同步正式动态编译与后续Vector/缓冲优化，468条功能配置的514组、10000条泛化及七条性能全部通过。详见[精度报告](results/精度报告.md)、[性能报告](results/性能报告.md)与[交付报告](results/交付报告.md)。
